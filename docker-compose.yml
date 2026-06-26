@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: akiba-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - akiba-network
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: akiba-server
+    environment:
+      - PORT=3000
+      - MONGODB_URI=******mongodb:27017/akiba?authSource=admin
+      - NODE_ENV=development
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongodb
+    networks:
+      - akiba-network
+    volumes:
+      - ./server/src:/app/src
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: akiba-client
+    environment:
+      - VITE_API_URL=http://localhost:3000/api
+    ports:
+      - "5173:5173"
+    networks:
+      - akiba-network
+    volumes:
+      - ./client/src:/app/src
+
+volumes:
+  mongodb_data:
+
+networks:
+  akiba-network:
+    driver: bridge
