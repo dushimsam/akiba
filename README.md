@@ -323,3 +323,48 @@ MIT License - see LICENSE file for details
 
 **Questions?** Check the [QUICKSTART.md](QUICKSTART.md) or open an [issue](https://github.com/dushimsam/akiba/issues).
 
+
+## Docker Development Environment
+
+### Prerequisites
+- Docker Engine 24+
+- Docker Compose v2 (bundled as `docker compose`)
+
+### Configure environment
+```bash
+cp .env.example .env
+# edit .env if you want non-default credentials/ports
+```
+
+### Start the full stack
+```bash
+docker compose up --build
+```
+This starts MongoDB, the Express server, and the Vite client, wired together
+on a private `akiba-network`. The server waits for Mongo to report healthy
+before starting, and the client waits for the server's `/api/health` check
+before starting.
+
+- Frontend: http://localhost:5173
+- Backend:  http://localhost:3000
+- Mongo:    localhost:27017 (credentials from `.env`)
+
+### Run in the background
+```bash
+docker compose up -d --build
+```
+
+### View logs
+```bash
+docker compose logs -f
+```
+
+### Stop the stack
+```bash
+docker compose down
+```
+
+### Stop and remove data volumes (fresh DB next start)
+```bash
+docker compose down -v
+```
