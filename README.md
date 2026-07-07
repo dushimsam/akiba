@@ -2,6 +2,19 @@
 
 A modern mobile money transaction platform for Rwanda, enabling quick transactions, smart transaction history, spending analytics, and savings tracking.
 
+## African Context
+
+Mobile money is the main way people move money in Rwanda, yet most of it still runs through USSD menus. These menus are slow to navigate, easy to get wrong, and give users no view of their transaction history or spending habits. Foreigners living in Rwanda struggle with them even more since the menus assume local knowledge.
+
+AKIBA addresses this by putting common mobile money operations behind a simple app interface: quick transactions, a searchable history, spending analytics, and Mokash savings tracking. The value is not replacing mobile money but making it visible and easier to use for everyday users.
+
+## Team Members
+
+- Samuel Dushimimana ([@dushimsam](https://github.com/dushimsam)) - Team Lead & DevOps
+- David M. ([@DLOADIN](https://github.com/DLOADIN)) - Backend & Docker
+- John Obure ([@obure1always](https://github.com/obure1always)) - Repository Configuration & Documentation
+- Kelvin Chirchir ([@kenchirchir](https://github.com/kenchirchir)) - Frontend & Testing
+
 ## 📚 Documentation
 
 - **[README.md](README.md)** - Project overview and structure
@@ -9,6 +22,7 @@ A modern mobile money transaction platform for Rwanda, enabling quick transactio
 - **[API.md](API.md)** - Complete API documentation
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines
 - **[SECURITY.md](SECURITY.md)** - Security guidelines and roadmap
+- **[Project Board](https://github.com/dushimsam/akiba/projects)** - Kanban board with backlog, in progress and done columns
 
 ## Project Structure
 
@@ -179,6 +193,18 @@ This project handles financial transactions. See [SECURITY.md](SECURITY.md) for:
 
 ⚠️ **Status**: Foundation phase - Rate limiting and authentication to be added in Phase 2
 
+## Branch Protection
+
+The `main` branch is protected with the following rules, so that every change is reviewed and main always stays in a working state:
+
+- **Pull request required before merging** - nobody can push directly to main, all changes go through a PR.
+- **At least 1 approving review** - a second team member has to read and approve every change.
+- **Stale approvals dismissed on new commits** - if new commits are pushed after approval, the PR has to be reviewed again so approvals always match the code being merged.
+- **Status checks must pass** - the CI pipeline (lint, tests, Docker build) has to succeed before a PR can be merged.
+- **Branch must be up to date before merging** - avoids merging code that was never tested against the latest main.
+- **Conversations must be resolved** - review comments cannot be ignored or forgotten.
+- **Rules apply to administrators** - everyone on the team follows the same workflow, including repo admins.
+
 ## Testing
 
 ```bash
@@ -302,7 +328,7 @@ See [SECURITY.md](SECURITY.md) for detailed security checklist.
 
 ## Authors & Contributors
 
-- **DLOADIN** - Project Lead & Initial Development
+See [Team Members](#team-members).
 
 ## License
 

@@ -1,5 +1,6 @@
 import express from 'express'
 import Transaction from '../models/Transaction.js'
+import { validateNewTransaction } from '../validate.js'
 
 const router = express.Router()
 
@@ -18,8 +19,9 @@ router.post('/', async (req, res) => {
   try {
     const { userId, type, amount, recipient, description } = req.body
 
-    if (!userId || !type || !amount) {
-      return res.status(400).json({ error: 'Missing required fields' })
+    const validationError = validateNewTransaction(req.body)
+    if (validationError) {
+      return res.status(400).json({ error: validationError })
     }
 
     const transaction = new Transaction({
