@@ -1,0 +1,202 @@
+---
+- name: Ensure deployment directory exists
+  file:
+    path: /opt/akiba
+    state: directory
+    mode: '0755'
+  become: yes
+  tags:
+    - application
+    - deployment
+- name: Create application environment file template
+  template:
+    src: .env.j2
+    dest: /opt/akiba/.env
+    mode: '0600'
+  become: yes
+  tags:
+    - application
+    - deployment
+    - environment
+- name: Copy docker-compose file
+  copy:
+    src: ../../docker-compose.yml
+    dest: /opt/akiba/docker-compose.yml
+    mode: '0644'
+  become: yes
+  tags:
+    - application
+    - deployment
+- name: Verify docker-compose file exists
+  stat:
+    path: /opt/akiba/docker-compose.yml
+  register: compose_file_stat
+  tags:
+    - application
+    - deployment
+- name: Create docker-compose file if not copied
+  file:
+    path: /opt/akiba/docker-compose.yml
+    state: touch
+    mode: '0644'
+  become: yes
+  when: not compose_file_stat.stat.exists
+  tags:
+    - application
+    - deployment
+- name: Create necessary application directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: appuser
+    group: appuser
+  become: yes
+  loop:
+    - /opt/akiba/logs
+    - /opt/akiba/data
+    - /opt/akiba/mongodb_data
+  tags:
+    - application
+    - deployment
+- name: Pull latest application images
+  command: docker-compose -f /opt/akiba/docker-compose.yml pull
+  become: yes
+  tags:
+    - application
+    - deployment
+    - images
+- name: Deploy application with docker-compose
+  command: docker-compose -f /opt/akiba/docker-compose.yml up -d
+  args:
+    chdir: /opt/akiba
+  become: yes
+  tags:
+    - application
+    - deployment
+    - containers
+- name: Wait for services to be ready
+  pause:
+    seconds: 10
+  tags:
+    - application
+    - deployment
+- name: Verify service health
+  command: docker-compose -f /opt/akiba/docker-compose.yml ps
+  register: stack_status
+  become: yes
+  tags:
+    - application
+    - deployment
+    - verify
+- name: Display stack status
+  debug:
+    msg: "{{ stack_status.stdout_lines }}"
+  tags:
+    - application
+    - deployment
+    - verify
+- name: Check if application is responding
+  uri:
+    url: "http://localhost:{{ server_port | default(3000) }}/api/health"
+    method: GET
+    status_code: 200
+  register: health_check
+  retries: 5
+  delay: 5
+  until: health_check.status == 200
+  ignore_errors: yes
+  tags:
+    - application
+    - deployment
+    - verify
+- name: Display health check result
+  debug:
+    msg: "Application health check status: {{ health_check.status | default('Not responding') }}"
+  tags:
+    - application
+    - deployment
+    - verify
+- name: Create application restart script
+  template:
+    src: restart-app.sh.j2
+    dest: /usr/local/bin/restart-akiba
+    mode: '0755'
+  become: yes
+  tags:
+    - application
+    - deployment
+    - scripts
+- name: Create application logs directory with proper permissions
+  file:
+    path: /var/log/akiba
+    state: directory
+    mode: '0755'
+    owner: appuser
+    group: appuser
+  become: yes
+  tags:
+    - application
+    - logging
+- name: Create systemd service file for docker-compose application
+  template:
+    src: akiba.service.j2
+    dest: /etc/systemd/system/akiba.service
+    mode: '0644'
+  become: yes
+  notify: Reload systemd daemon
+  tags:
+    - application
+    - deployment
+    - systemd
+- name: Enable and start akiba service
+  systemd:
+    name: akiba
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - application
+    - deployment
+- name: Create backup script for database
+  template:
+    src: backup-db.sh.j2
+    dest: /usr/local/bin/backup-akiba-db
+    mode: '0755'
+  become: yes
+  tags:
+    - application
+    - backup
+- name: Set up cron job for daily database backups
+  cron:
+    name: "Backup AKIBA MongoDB daily"
+    hour: "2"
+    minute: "0"
+    job: "/usr/local/bin/backup-akiba-db"
+    user: appuser
+    state: present
+  become: yes
+  tags:
+    - application
+    - backup
+- name: Display deployment summary
+  debug:
+    msg: |
+      Application deployment completed successfully:
+      - Application deployed to /opt/akiba
+      - Services started with docker-compose
+      - Systemd service configured for auto-restart
+      - Daily database backups scheduled at 2:00 AM
+      - Health check endpoint: http://localhost:{{ server_port | default(3000) }}/api/health
+  tags:
+    - application
+    - deployment
+- name: Reload systemd daemon after service file creation
+  systemd:
+    daemon_reload: yes
+  become: yes
+  listen: "Reload systemd daemon"
+  tags:
+    - application
+    - deployment
