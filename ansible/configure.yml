@@ -1,9 +1,5 @@
 ---
-# Main Ansible playbook for AKIBA application deployment
-# This playbook configures a server provisioned by Terraform with:
-# - Docker and Docker Compose
-# - AKIBA containerized application
-# - Security hardening (firewall, SSH, fail2ban)
+# This is our team's main Ansible playbook for AKIBA application deployment
 
 - name: Configure AKIBA Server
   hosts: web_servers
@@ -12,11 +8,11 @@
     - vars/default.yml
   
   roles:
-    # Install Docker and Docker Compose
+    # This is where we install Docker and Docker Compose
     - role: docker
       tags: ['docker', 'dependencies']
     
-    # Configure security settings
+    # This is where we configure security settings
     - role: security
       tags: ['security', 'hardening']
     - role: application
@@ -49,10 +45,8 @@
     - name: Display deployment summary
       debug:
         msg: |
-          ================================
-          Deployment Completed Successfully
-          ================================
           
+          Deployment Completed Successfully
           Access your application at:
           http://{{ ansible_host }}:{{ server_port | default(3000) }}
           
