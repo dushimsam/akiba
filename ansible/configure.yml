@@ -1,0 +1,86 @@
+---
+# Main Ansible playbook for AKIBA application deployment
+# This playbook configures a server provisioned by Terraform with:
+# - Docker and Docker Compose
+# - AKIBA containerized application
+# - Security hardening (firewall, SSH, fail2ban)
+
+- name: Configure AKIBA Server
+  hosts: web_servers
+  become_user: root
+  vars_files:
+    - vars/default.yml
+  
+  roles:
+    # Install Docker and Docker Compose
+    - role: docker
+      tags: ['docker', 'dependencies']
+    
+    # Configure security settings
+    - role: security
+      tags: ['security', 'hardening']
+    - role: application
+      tags: ['application', 'deployment']
+
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg: |
+          ================================
+          AKIBA Application Deployment
+          ================================
+          Target Host: {{ ansible_host }}
+          Environment: {{ server_env | default('production') }}
+          Application Port: {{ server_port | default(3000) }}
+          MongoDB Database: {{ mongo_db_name | default('akiba') }}
+          ================================
+      tags: ['always', 'info']
+
+    - name: Verify Ansible control node connectivity
+      ping:
+      tags: ['always', 'connectivity']
+
+    - name: Gather system information
+      setup:
+        gather_subset: min
+      tags: ['always', 'info']
+
+  post_tasks:
+    - name: Display deployment summary
+      debug:
+        msg: |
+          ================================
+          Deployment Completed Successfully
+          ================================
+          
+          Access your application at:
+          http://{{ ansible_host }}:{{ server_port | default(3000) }}
+          
+          API Health Check:
+          http://{{ ansible_host }}:{{ server_port | default(3000) }}/api/health
+          
+          Useful commands:
+          - View logs: docker-compose -f /opt/akiba/docker-compose.yml logs -f
+          - Restart app: /usr/local/bin/restart-akiba
+          - Check status: docker-compose -f /opt/akiba/docker-compose.yml ps
+          - View firewall: sudo ufw status
+          
+          MongoDB Access:
+          - Host: localhost
+          - Port: 27017
+          - Database: {{ mongo_db_name | default('akiba') }}
+          
+          For detailed logs: journalctl -u akiba -f
+          
+          ================================
+      tags: ['always', 'summary']
+
+    - name: Verify all services are running
+      command: docker-compose -f /opt/akiba/docker-compose.yml ps
+      register: final_status
+      tags: ['always', 'final_check']
+
+    - name: Display service status
+      debug:
+        var: final_status.stdout_lines
+      tags: ['always', 'final_check']
