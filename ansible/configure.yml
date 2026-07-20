@@ -22,14 +22,12 @@
     - name: Display deployment information
       debug:
         msg: |
-          ================================
-          AKIBA Application Deployment
-          ================================
+          This is some AKIBA Application Deployment
+          
           Target Host: {{ ansible_host }}
           Environment: {{ server_env | default('production') }}
           Application Port: {{ server_port | default(3000) }}
           MongoDB Database: {{ mongo_db_name | default('akiba') }}
-          ================================
       tags: ['always', 'info']
 
     - name: Verify Ansible control node connectivity
@@ -65,8 +63,6 @@
           - Database: {{ mongo_db_name | default('akiba') }}
           
           For detailed logs: journalctl -u akiba -f
-          
-          ================================
       tags: ['always', 'summary']
 
     - name: Verify all services are running
