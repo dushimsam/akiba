@@ -1,305 +1,256 @@
-# AKIBA Security & Performance Roadmap
+# AKIBA Security Documentation
 
-## Current Security Analysis
+This document describes the security scanning workflow implemented for AKIBA, the vulnerabilities identified during implementation, and the remediation actions taken. It is kept in sync with the CI configuration in [`.github/workflows/security-scan.yml`](.github/workflows/security-scan.yml).
 
-### Code Quality Issues Found by CodeQL
+**Last updated:** 2026-07-21  
+**Related PR:** [#35 – feat/security-scanning](https://github.com/dushimsam/akiba/pull/35)
 
-#### Rate Limiting (Medium Priority)
+---
 
-**Status**: Recommended for Phase 2
-**Severity**: Medium
-**Affected**: Transaction API endpoints
+## Overview
 
-The transaction endpoints (`GET /transactions/:userId` and `POST /transactions`) do not have rate limiting implemented. This should be added to prevent abuse.
+AKIBA is a mobile money transaction platform. Because it handles financial data, dependency and container security are checked automatically in CI before changes reach `main`.
 
-**Recommended Solution:**
-```javascript
-import rateLimit from 'express-rate-limit';
+The project uses two complementary scanners:
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-});
+| Tool | Scope | Purpose |
+|------|-------|---------|
+| **npm audit** | Node.js dependencies (`package-lock.json`) | Detects known CVEs in npm packages used by the app |
+| **Trivy** | Docker container image | Scans OS packages and application dependencies baked into the production image |
 
-app.use('/api/transactions', limiter);
+These scans run alongside the main CI pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), which handles linting, tests, and Docker builds on feature branches.
+
+---
+
+## Security Scanning Workflow
+
+### When scans run
+
+The **Security Scan** workflow is defined in [`.github/workflows/security-scan.yml`](.github/workflows/security-scan.yml) and triggers on:
+
+- **Push** to `main`
+- **Pull requests** targeting `main`
+
+This is separate from the **CI/CD** workflow, which runs on pushes to non-`main` branches and on pull requests to `main`.
+
+```text
+Pull request opened/updated
+        │
+        ├─► CI/CD workflow (ci.yml)
+        │     • lint
+        │     • tests
+        │     • Docker build (smoke)
+        │
+        └─► Security Scan workflow (security-scan.yml)
+              ├─► dependency-scan  (npm audit)
+              └─► container-scan     (Docker build + Trivy)
 ```
 
-**Implementation Timeline**: Phase 2
-**Dependencies to Add**: `express-rate-limit`
+Both security jobs run in parallel on `ubuntu-latest`.
+
+### Job 1: `dependency-scan`
+
+| Step | Command | Blocks merge? |
+|------|---------|---------------|
+| Install dependencies | `npm install` | Yes (on failure) |
+| Audit production dependencies | `npm audit --omit=dev --audit-level=high` | **Yes** — fails on HIGH or CRITICAL production vulnerabilities |
+| Audit all dependencies (informational) | `npm audit` | No — `continue-on-error: true` |
+
+Production dependencies are the packages shipped in the runtime server image (`server/package.json`). Dev-only tooling (Vite, ESLint, Jest, etc.) is excluded from the blocking audit.
+
+### Job 2: `container-scan`
+
+| Step | Action | Blocks merge? |
+|------|--------|---------------|
+| Build production image | `docker build -t akiba-app:$SHA .` | Yes (on failure) |
+| Scan with Trivy | `aquasecurity/trivy-action@v0.36.0` | **Yes** — fails on HIGH or CRITICAL findings |
+
+Trivy configuration:
+
+- **Severity filter:** `HIGH,CRITICAL`
+- **Ignore unfixed:** `true` (only report vulnerabilities with available patches)
+- **Exit code:** `1` (workflow fails when findings are present)
+
+The image scanned is the multi-stage production Dockerfile at the repository root, which builds the React client and serves it from the Express server.
 
 ---
 
-## Security Roadmap
+## Findings Summary
 
-### Phase 1: Foundation (Current)
-- [x] Basic project structure
-- [x] API endpoints without authentication
-- [ ] Input validation (HIGH PRIORITY)
-- [ ] Error handling
+### Remediated findings
 
-### Phase 2: Security Hardening
-- [ ] Rate limiting
-- [ ] Request validation middleware
-- [ ] CORS configuration hardening
-- [ ] MongoDB query injection prevention
-- [ ] Helmet.js for HTTP headers
-- [ ] API authentication (JWT)
-- [ ] Data encryption at rest
+| ID | Component | Severity | Scanner | Status |
+|----|-----------|----------|---------|--------|
+| CVE-2026-12590 / [GHSA-v422-hmwv-36x6](https://github.com/advisories/GHSA-v422-hmwv-36x6) | `body-parser` 1.20.5 | High | npm audit | **Fixed** → 1.20.6 |
+| CVE-2026-13149 / [GHSA-3jxr-9vmj-r5cp](https://github.com/advisories/GHSA-3jxr-9vmj-r5cp) | `brace-expansion` 1.1.15 | High | npm audit | **Fixed** → 1.1.16 |
+| Alpine OS packages (unpatched CVEs in base image) | `node:20-alpine` runtime layer | High / Critical | Trivy | **Fixed** → `apk upgrade --no-cache` |
+| npm CLI in production image | `node:20-alpine` runtime layer | High | Trivy | **Fixed** → npm binaries removed after install |
 
-### Phase 3: Advanced Security
-- [ ] OAuth2/SSO integration
-- [ ] Two-factor authentication
-- [ ] Audit logging
-- [ ] Data anonymization
-- [ ] Compliance testing (PCI DSS, etc.)
-- [ ] Penetration testing
+### Production dependency scan (current status)
 
----
-
-## Recommended Immediate Actions
-
-### 1. Input Validation (HIGH)
-Add request validation using `joi` or `express-validator`:
-
-```javascript
-import { body, validationResult } from 'express-validator';
-
-router.post('/', [
-  body('userId').isString().notEmpty(),
-  body('type').isIn(['airtime', 'bundle', 'transfer', 'bill', 'savings']),
-  body('amount').isFloat({ min: 0 }).notEmpty(),
-], (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  // Process request
-});
-```
-
-### 2. Error Handling
-Implement proper error handling:
-- Don't expose sensitive error details to clients
-- Log errors server-side for debugging
-- Return generic error messages to clients
-
-### 3. Environment Variables
-- Never commit `.env` files
-- Use strong, unique passwords for MongoDB
-- Rotate credentials regularly
-- Use different credentials for dev/test/prod
-
-### 4. HTTPS/TLS
-- Deploy with HTTPS only
-- Use valid SSL certificates
-- Set secure headers
-
----
-
-## Dependency Security
-
-### Current Dependencies
-
-**Backend (server):**
-- express: ^4.18.2
-- mongoose: ^7.5.0
-- dotenv: ^16.3.1
-- cors: ^2.8.5
-- body-parser: ^1.20.2
-
-**Frontend (client):**
-- react: ^18.2.0
-- react-dom: ^18.2.0
-- axios: ^1.5.0
-- vite: ^4.4.9
-
-### Recommended Security Packages
+As of the last local verification on 2026-07-21:
 
 ```bash
-# Backend security
-npm install helmet express-rate-limit express-validator
-
-# Frontend security
-npm install dompurify
-
-# General
-npm install snyk
+npm audit --omit=dev --audit-level=high
+# found 0 vulnerabilities
 ```
 
-### Auditing
+**Result:** Production dependency scans complete successfully with no HIGH or CRITICAL findings.
+
+### Container scan (current status)
+
+After Dockerfile hardening (Alpine package upgrades and removal of the npm CLI from the runtime image), Trivy container scans pass with no HIGH or CRITICAL findings that have available fixes.
+
+---
+
+## Remediation Details
+
+### 1. `body-parser` denial-of-service vulnerability (CVE-2026-12590)
+
+**Finding:** Versions prior to 1.20.6 silently disabled request body size limits when an invalid `limit` option was configured, allowing arbitrarily large payloads and potential denial of service.
+
+**Impact:** Production dependency — used directly by the Express server for JSON and URL-encoded body parsing.
+
+**Remediation:**
+- Upgraded `body-parser` from `1.20.5` to `1.20.6` in `package-lock.json`
+- Commit: `d4d3334` — *fix: patch high severity vulnerabilities in body-parser and brace-expansion*
+
+**Verification:** `npm audit --omit=dev --audit-level=high` reports 0 vulnerabilities.
+
+### 2. `brace-expansion` denial-of-service vulnerability (CVE-2026-13149)
+
+**Finding:** `brace-expansion` versions prior to 1.1.16 exhibited exponential-time behavior when expanding consecutive non-expanding `{}` groups, allowing a tiny input to hang the Node.js event loop.
+
+**Impact:** Dev dependency only (transitive dependency of test/lint tooling). Not included in the production Docker image.
+
+**Remediation:**
+- Upgraded `brace-expansion` from `1.1.15` to `1.1.16` in `package-lock.json`
+- Commit: `d4d3334` — *fix: patch high severity vulnerabilities in body-parser and brace-expansion*
+
+**Verification:** Resolved in the full dependency tree; no longer reported by `npm audit`.
+
+### 3. Container image OS vulnerabilities (Trivy)
+
+**Finding:** Trivy reported HIGH/CRITICAL vulnerabilities in Alpine Linux packages bundled with the `node:20-alpine` base image.
+
+**Impact:** Production container — exploitable if an attacker can reach the running service and chain with other flaws.
+
+**Remediation:**
+- Added `apk upgrade --no-cache` to the runtime stage of the Dockerfile to apply available Alpine security patches at build time
+- Commit: `1d3ca22` — *fix: patch os packages and drop npm cli from runtime image*
+
+**Verification:** Trivy container scan passes with `severity: HIGH,CRITICAL` and `ignore-unfixed: true`.
+
+### 4. npm CLI present in production image (Trivy)
+
+**Finding:** The npm CLI and its dependency tree were present in the production runtime image after `npm install --omit=dev`, increasing the attack surface.
+
+**Impact:** Production container — unnecessary tooling that could be exploited if combined with other vulnerabilities.
+
+**Remediation:**
+- Removed npm binaries and cache after installing production dependencies:
+  ```dockerfile
+  RUN npm install --omit=dev && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /root/.npm
+  ```
+- Commit: `1d3ca22` — *fix: patch os packages and drop npm cli from runtime image*
+
+**Verification:** Trivy no longer flags npm-related packages in the final runtime image.
+
+### 5. Invalid Trivy action version (workflow fix)
+
+**Finding:** Initial workflow referenced an invalid `trivy-action` version tag, causing the container scan job to fail before any image analysis could run.
+
+**Remediation:**
+- Pinned to a valid release: `aquasecurity/trivy-action@v0.36.0`
+- Commit: `d053420` — *fix: use valid trivy-action version*
+
+---
+
+## Known Remaining Issues
+
+### Dev-only dependency findings (accepted risk)
+
+The informational full audit (`npm audit` without `--omit=dev`) still reports vulnerabilities in development tooling:
+
+| Package | Severity | Advisory | Justification |
+|---------|----------|----------|---------------|
+| `esbuild` ≤ 0.24.2 | Moderate | [GHSA-67mh-4wv8-2f99](https://github.com/advisories/GHSA-67mh-4wv8-2f99) | Dev-only — affects the Vite development server, not the production build or runtime image |
+| `vite` ≤ 6.4.2 | High (transitive via esbuild) | Multiple advisories | Dev-only — Vite is a build tool; the production Docker image serves pre-built static assets and does not run Vite |
+
+**Why this is acceptable:**
+- These packages are **not installed** in the production Docker image (`npm install --omit=dev` in the runtime stage only installs server dependencies).
+- The blocking CI step uses `npm audit --omit=dev --audit-level=high`, which passes cleanly.
+- The full audit step is informational (`continue-on-error: true`) and exists for visibility.
+- Fixing `vite`/`esbuild` requires upgrading to Vite 8.x, which is a **breaking change** and is deferred to a dedicated dependency upgrade task.
+
+**Planned action:** Upgrade Vite and related dev tooling in a future PR when the team can regression-test the frontend build.
+
+### Application-level security gaps (not detected by automated scans)
+
+The following items were identified during implementation review. They are **not** reported by npm audit or Trivy but are tracked for future hardening:
+
+| Gap | Severity | Status | Notes |
+|-----|----------|--------|-------|
+| No API authentication | High | Planned (Phase 2) | Endpoints are currently open; JWT auth is on the roadmap |
+| No rate limiting | Medium | Planned (Phase 2) | Transaction endpoints lack `express-rate-limit` |
+| Permissive CORS | Medium | Planned (Phase 2) | `cors()` is applied without origin restrictions |
+| No HTTP security headers | Low | Planned (Phase 2) | Helmet.js not yet integrated |
+| Error messages expose internals | Low | Partial | Some routes return `error.message` to clients |
+
+Input validation for new transactions is implemented in [`server/src/validate.js`](server/src/validate.js) and covered by unit tests in [`server/src/validate.test.js`](server/src/validate.test.js).
+
+---
+
+## Running Scans Locally
+
+Reproduce the CI security checks on your machine:
 
 ```bash
-# Check for vulnerabilities
+# Install dependencies
+npm install
+
+# Production dependency audit (must pass — same as CI)
+npm audit --omit=dev --audit-level=high
+
+# Full audit (informational — same as CI)
 npm audit
 
-# Fix vulnerabilities
-npm audit fix
-
-# Monitor with Snyk
-npx snyk test
+# Container scan (requires Docker and Trivy)
+docker build -t akiba-app:local .
+trivy image --severity HIGH,CRITICAL --ignore-unfixed akiba-app:local
 ```
 
----
-
-## Best Practices for Contributors
-
-1. **Never commit secrets:**
-   - API keys
-   - MongoDB credentials
-   - JWT secrets
-   - Session tokens
-
-2. **Always validate input:**
-   - Sanitize user inputs
-   - Validate data types
-   - Check ranges and lengths
-
-3. **Use environment variables:**
-   - Sensitive configuration
-   - Deployment-specific settings
-   - Database credentials
-
-4. **Keep dependencies updated:**
-   - Regular security updates
-   - Monitor for vulnerabilities
-   - Pin versions in production
-
-5. **Follow OWASP guidelines:**
-   - SQL injection prevention
-   - XSS prevention
-   - CSRF protection
-   - Secure authentication
+Install Trivy: https://aquasecurity.github.io/trivy/latest/getting-started/installation/
 
 ---
 
-## MongoDB Security Best Practices
+## Keeping This Document Up to Date
 
-1. **Enable Authentication:**
-   - Use MongoDB Atlas with IP whitelisting
-   - Create strong database passwords
-   - Use role-based access control
+Update `SECURITY.md` whenever:
 
-2. **Network Security:**
-   - Use VPC for database
-   - Whitelist application servers only
-   - Enable encryption in transit
+1. A new scanner is added to [`.github/workflows/security-scan.yml`](.github/workflows/security-scan.yml)
+2. Scan triggers, severity thresholds, or blocking behavior change
+3. A vulnerability is discovered and remediated (or accepted with justification)
+4. A dependency upgrade changes the audit or Trivy results
 
-3. **Data Security:**
-   - Enable encryption at rest
-   - Regular backups
-   - Enable audit logging
-
-4. **Query Security:**
-   - Use parameterized queries (Mongoose does this)
-   - Validate all inputs
-   - Use proper indexes
+After changes, re-run the local commands above and update the **Findings Summary** and **Known Remaining Issues** sections.
 
 ---
 
-## Monitoring & Logging
+## Reporting Security Vulnerabilities
 
-### Recommended Logging Package
-```bash
-npm install winston
-```
+If you discover a security issue in AKIBA:
 
-### Example Implementation
-```javascript
-import winston from 'winston';
-
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.json(),
-  transports: [
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'combined.log' })
-  ]
-});
-
-// Log important operations
-logger.info('User transaction', { userId, amount, type });
-```
+1. **Do not** open a public GitHub issue for exploitable vulnerabilities.
+2. Contact the team directly (see [README.md](README.md) for team members).
+3. Follow responsible disclosure — allow reasonable time for a fix before public disclosure.
 
 ---
 
-## Performance Optimization
+## References
 
-1. **Database:**
-   - Add proper indexes
-   - Implement query optimization
-   - Use connection pooling
-
-2. **Caching:**
-   - Implement Redis for caching
-   - Cache frequently accessed data
-   - Use ETags for client-side caching
-
-3. **API:**
-   - Implement pagination
-   - Compress responses (gzip)
-   - Use CDN for static assets
-
-4. **Frontend:**
-   - Lazy load components
-   - Code splitting
-   - Image optimization
-
----
-
-## Compliance Considerations
-
-For a financial application handling transactions:
-
-1. **Data Protection:**
-   - GDPR compliance
-   - Data retention policies
-   - User data deletion
-
-2. **Financial Regulations:**
-   - Transaction limits
-   - AML (Anti-Money Laundering)
-   - KYC (Know Your Customer)
-
-3. **Audit Trail:**
-   - Transaction logging
-   - User action tracking
-   - Compliance reporting
-
----
-
-## Security Checklist
-
-- [ ] Validate all user inputs
-- [ ] Use HTTPS only
-- [ ] Implement authentication
-- [ ] Add rate limiting
-- [ ] Enable CORS properly
-- [ ] Use secure headers (Helmet.js)
-- [ ] Implement logging
-- [ ] Regular security audits
-- [ ] Dependency vulnerability scanning
-- [ ] Database encryption
-- [ ] API key rotation
-- [ ] Incident response plan
-
----
-
-## Resources
-
-- OWASP Top 10: https://owasp.org/www-project-top-ten/
-- Express.js Security: https://expressjs.com/en/advanced/best-practice-security.html
-- MongoDB Security: https://docs.mongodb.com/manual/security/
-- Node.js Security: https://nodejs.org/en/docs/guides/security/
-
-## Support
-
-For security concerns:
-1. Do not create public issues
-2. Email security team directly
-3. Follow responsible disclosure
-4. Allow time for fixes before public disclosure
-
----
-
-**Last Updated**: 2024-06-26
-**Current Version**: 1.0.0 (Foundation)
+- [npm audit documentation](https://docs.npmjs.com/cli/commands/npm-audit)
+- [Trivy documentation](https://aquasecurity.github.io/trivy/)
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [Express.js security best practices](https://expressjs.com/en/advanced/best-practice-security.html)
+- [MongoDB security checklist](https://www.mongodb.com/docs/manual/administration/security-checklist/)
