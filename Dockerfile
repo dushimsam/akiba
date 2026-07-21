@@ -10,9 +10,9 @@ FROM node:20-alpine AS runner
 ENV NODE_ENV=production
 ENV PORT=3000
 WORKDIR /app/server
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN apk upgrade --no-cache && addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY server/package.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /root/.npm
 COPY --from=builder /app/server/src ./src
 COPY --from=builder /app/client/dist ./client/dist
 RUN chown -R appuser:appgroup /app
