@@ -1,0 +1,264 @@
+---
+- name: Enable UFW firewall
+  ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+  become: yes
+  tags:
+    - security
+    - firewall
+- name: Allow SSH access
+  ufw:
+    rule: allow
+    port: ssh
+    proto: tcp
+  become: yes
+  tags:
+    - security
+    - firewall
+- name: Allow HTTP traffic
+  ufw:
+    rule: allow
+    port: '80'
+    proto: tcp
+  become: yes
+  tags:
+    - security
+    - firewall
+- name: Allow HTTPS traffic
+  ufw:
+    rule: allow
+    port: '443'
+    proto: tcp
+  become: yes
+  tags:
+    - security
+    - firewall
+- name: Allow application server port
+  ufw:
+    rule: allow
+    port: "{{ server_port | default('3000') }}"
+    proto: tcp
+  become: yes
+  tags:
+    - security
+    - firewall
+- name: Apply UFW defaults
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  become: yes
+  loop:
+    - { direction: 'incoming', policy: 'deny' }
+    - { direction: 'outgoing', policy: 'allow' }
+  tags:
+    - security
+    - firewall
+- name: Configure SSH - Update sshd_config (disable root login)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^
+    line: 'PermitRootLogin no'
+  become: yes
+  notify: Restart SSH
+  tags:
+    - security
+    - ssh
+- name: Configure SSH - Disable password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^
+    line: 'PasswordAuthentication no'
+  become: yes
+  notify: Restart SSH
+  tags:
+    - security
+    - ssh
+- name: Configure SSH - Enable public key authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^
+    line: 'PubkeyAuthentication yes'
+  become: yes
+  notify: Restart SSH
+  tags:
+    - security
+    - ssh
+- name: Configure SSH - Disable empty password login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^
+    line: 'PermitEmptyPasswords no'
+  become: yes
+  notify: Restart SSH
+  tags:
+    - security
+    - ssh
+- name: Configure SSH - Set maximum authentication attempts
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^
+    line: 'MaxAuthTries 3'
+  become: yes
+  notify: Restart SSH
+  tags:
+    - security
+    - ssh
+- name: Configure SSH - Set login grace time
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^
+    line: 'LoginGraceTime 20'
+  become: yes
+  notify: Restart SSH
+  tags:
+    - security
+    - ssh
+- name: Configure SSH - Disable X11 forwarding
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^
+    line: 'X11Forwarding no'
+  become: yes
+  notify: Restart SSH
+  tags:
+    - security
+    - ssh
+- name: Configure SSH - Restrict allowed users
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    line: 'AllowUsers {{ ansible_user }}'
+    state: present
+  become: yes
+  notify: Restart SSH
+  tags:
+    - security
+    - ssh
+- name: Install fail2ban for brute-force protection
+  apt:
+    name: fail2ban
+    state: present
+  become: yes
+  tags:
+    - security
+    - fail2ban
+- name: Enable and start fail2ban service
+  systemd:
+    name: fail2ban
+    state: started
+    enabled: yes
+  become: yes
+  tags:
+    - security
+    - fail2ban
+- name: Configure fail2ban for SSH
+  template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    backup: yes
+  become: yes
+  notify: Restart fail2ban
+  tags:
+    - security
+    - fail2ban
+- name: Ensure system packages are up to date
+  apt:
+    name: '*'
+    state: latest
+  become: yes
+  tags:
+    - security
+    - system
+- name: Install security updates
+  apt:
+    upgrade: dist
+  become: yes
+  tags:
+    - security
+    - system
+- name: Set filesystem attribute for security
+  lineinfile:
+    path: /etc/fstab
+    regexp: 'UUID.*\/'
+    state: present
+  become: yes
+  tags:
+    - security
+    - filesystem
+- name: Disable unnecessary services
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  become: yes
+  ignore_errors: yes
+  loop:
+    - avahi-daemon
+    - cups
+  tags:
+    - security
+    - services
+- name: Create application user for deployment
+  user:
+    name: appuser
+    state: present
+    createhome: yes
+    shell: /bin/bash
+    groups: docker
+    append: yes
+  become: yes
+  tags:
+    - security
+    - users
+- name: Set up audit logging for important files
+  lineinfile:
+    path: /etc/audit/rules.d/audit.rules
+    line: "-w /etc/passwd -p wa -k identity"
+    create: yes
+  become: yes
+  ignore_errors: yes
+  tags:
+    - security
+    - audit
+- name: Display security configuration summary
+  debug:
+    msg: |
+      Security configuration completed:
+      - SSH hardened (root login disabled, key-based auth only)
+      - Firewall enabled with UFW
+      - Fail2ban installed for intrusion protection
+      - System packages updated
+  tags:
+    - security
+- name: Restart SSH service to apply configuration
+  systemd:
+    name: ssh
+    state: restarted
+  become: yes
+  listen: "Restart SSH"
+  tags:
+    - security
+    - ssh
+- name: Restart fail2ban service to apply rules
+  systemd:
+    name: fail2ban
+    state: restarted
+  become: yes
+  listen: "Restart fail2ban"
+  tags:
+    - security
+    - fail2ban
+- name: Verify firewall status
+  command: ufw status
+  register: firewall_status
+  become: yes
+  tags:
+    - security
+    - verify
+- name: Display firewall status
+  debug:
+    msg: "{{ firewall_status.stdout_lines }}"
+  tags:
+    - security
+    - verify

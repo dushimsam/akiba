@@ -1,0 +1,11 @@
+ansible>=2.9.0,<3.0.0
+jinja2>=2.11.0
+PyYAML>=5.1
+cryptography>=2.9.0
+ansible-lint>=4.2.0           
+yamllint>=1.20.0              
+python-dotenv>=0.12.0         
+pytest>=5.4.0
+pytest-testinfra>=6.0.0       
+netaddr>=0.7.19               
+paramiko>=2.7.0               

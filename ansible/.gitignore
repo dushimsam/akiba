@@ -1,0 +1,51 @@
+# Ansible directory gitignore
+# Secrets and sensitive files
+vault.yml
+*.vault
+.vault_password
+vault_pass.txt
+
+# SSH keys
+*.pem
+*.pub
+!*.pub
+
+# Ansible runtime files
+*.retry
+retries/
+*.log
+.ansible/
+
+# Python virtual environments
+venv/
+env/
+.venv
+.env
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Ansible fact cache
+fact_cache/
+/tmp/ansible_facts*
+
+# Generated files
+*.pyc
+__pycache__/
+.pytest_cache/
+
+# Application data
+backups/
+logs/
+*.db
+*.sqlite
+
+# Temporary files
+tmp/
+temp/
+*.tmp
