@@ -1,5 +1,5 @@
 import express from 'express'
-import Transaction from '../models/Transaction.js'
+import { findByUserId, findById, create } from '../models/Transaction.js'
 import { validateNewTransaction } from '../validate.js'
 
 const router = express.Router()
@@ -7,7 +7,7 @@ const router = express.Router()
 // Get all transactions for user
 router.get('/:userId', async (req, res) => {
   try {
-    const transactions = await Transaction.find({ userId: req.params.userId }).sort({ createdAt: -1 })
+    const transactions = await findByUserId(req.params.userId)
     res.json(transactions)
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -24,7 +24,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: validationError })
     }
 
-    const transaction = new Transaction({
+    const transaction = await create({
       userId,
       type,
       amount,
@@ -33,7 +33,6 @@ router.post('/', async (req, res) => {
       status: 'completed',
     })
 
-    await transaction.save()
     res.status(201).json(transaction)
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -43,7 +42,7 @@ router.post('/', async (req, res) => {
 // Get transaction by ID
 router.get('/detail/:id', async (req, res) => {
   try {
-    const transaction = await Transaction.findById(req.params.id)
+    const transaction = await findById(req.params.id)
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' })
     }

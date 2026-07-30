@@ -19,7 +19,7 @@ This directory contains Ansible playbooks and roles for configuring servers prov
 The Ansible playbook automates the complete server configuration including:
 
 - **Docker Installation**: Installs Docker and Docker Compose from official repositories
-- **Application Deployment**: Deploys the AKIBA containerized application with MongoDB
+- **Application Deployment**: Deploys the AKIBA containerized application with PostgreSQL
 - **Security Hardening**: 
   - Configures UFW firewall with minimal allowed ports
   - Hardens SSH configuration (disables password auth, root login)
@@ -27,7 +27,7 @@ The Ansible playbook automates the complete server configuration including:
   - Applies latest security patches
 - **Monitoring & Backup**: 
   - Configures systemd service for automatic restart
-  - Sets up daily MongoDB backups
+  - Sets up daily PostgreSQL backups
   - Implements health checks
 
 ## Prerequisites
@@ -115,7 +115,7 @@ web_servers:
       server_env: production
 ```
 
-### 2. Set MongoDB Credentials
+### 2. Set PostgreSQL Credentials
 
 Create a secure vault file for secrets:
 
@@ -127,7 +127,7 @@ ansible-vault create vault.yml
 Add the following content:
 
 ```yaml
-vault_mongodb_password: "your_secure_password_123"
+vault_postgres_password: "your_secure_password_123"
 vault_sudo_password: "your_sudo_password"
 ```
 
@@ -135,7 +135,7 @@ vault_sudo_password: "your_sudo_password"
 
 Edit `vars/default.yml` to customize:
 - `server_port`: Application port (default: 3000)
-- `mongo_db_name`: Database name (default: akiba)
+- `postgres_db`: Database name (default: akiba)
 - `backup_schedule_hour`: Time for daily backups (default: 2 AM)
 - `cors_origin`: CORS allowed origins (default: *)
 
@@ -159,7 +159,7 @@ cd ansible
 ansible-playbook configure.yml \
   -i inventory/hosts.yml \
   -e @vault.yml \
-  -e "mongodb_password=your_mongodb_password"
+  -e "postgres_password=your_postgres_password"
 ```
 
 ### With Vault Password Prompt
@@ -168,7 +168,7 @@ ansible-playbook configure.yml \
 ansible-playbook configure.yml \
   -i inventory/hosts.yml \
   --ask-vault-pass \
-  -e "mongodb_password=your_mongodb_password"
+  -e "postgres_password=your_postgres_password"
 ```
 
 ### Run Specific Roles Only
@@ -178,7 +178,7 @@ Deploy only Docker and dependencies:
 ```bash
 ansible-playbook configure.yml \
   -i inventory/hosts.yml \
-  -e "mongodb_password=your_mongodb_password" \
+  -e "postgres_password=your_postgres_password" \
   --tags docker
 ```
 
@@ -195,7 +195,7 @@ Deploy only the application:
 ```bash
 ansible-playbook configure.yml \
   -i inventory/hosts.yml \
-  -e "mongodb_password=your_mongodb_password" \
+  -e "postgres_password=your_postgres_password" \
   --tags application
 ```
 
@@ -207,7 +207,7 @@ Preview changes without applying:
 ansible-playbook configure.yml \
   -i inventory/hosts.yml \
   -e @vault.yml \
-  -e "mongodb_password=your_mongodb_password" \
+  -e "postgres_password=your_postgres_password" \
   --check
 ```
 
@@ -219,7 +219,7 @@ For detailed debugging:
 ansible-playbook configure.yml \
   -i inventory/hosts.yml \
   -e @vault.yml \
-  -e "mongodb_password=your_mongodb_password" \
+  -e "postgres_password=your_postgres_password" \
   -v                    # 1 level of verbosity
   # -vv                 # 2 levels
   # -vvv                # 3 levels (very verbose)
@@ -344,14 +344,14 @@ sudo ufw allow 3000/tcp
 sudo ufw delete allow 3000/tcp
 ```
 
-### MongoDB Connection Issues
+### PostgreSQL Connection Issues
 
 ```bash
-# Connect to MongoDB container
-docker exec -it akiba-mongodb mongosh -u root -p --authenticationDatabase admin
+# Connect to the PostgreSQL container
+docker exec -it akiba-postgres psql -U akiba -d akiba
 
 # Check container health
-docker exec akiba-mongodb mongosh --quiet --eval "db.adminCommand('ping')"
+docker exec akiba-postgres pg_isready -U akiba -d akiba
 ```
 
 ## Advanced Usage
@@ -395,7 +395,7 @@ ansible-playbook configure.yml \
 ansible-playbook configure.yml \
   -i inventory/hosts.yml \
   -e "server_port=8000" \
-  -e "mongo_db_name=custom_db" \
+  -e "postgres_db=custom_db" \
   -e "node_env=staging"
 ```
 
@@ -467,7 +467,7 @@ resource "null_resource" "run_ansible" {
         -i inventory/hosts.yml \
         -e "ansible_host=${aws_instance.web.public_ip}" \
         --extra-vars @vault.yml \
-        -e "mongodb_password=${var.mongodb_password}"
+        -e "postgres_password=${var.postgres_password}"
     EOT
   }
 

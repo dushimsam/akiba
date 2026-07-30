@@ -1,5 +1,5 @@
 ---
-vault_mongodb_password: "your_secure_mongodb_password_here"
+vault_postgres_password: "your_secure_postgres_password_here"
 vault_ssh_passphrase: "your_ssh_key_passphrase_here"
 vault_sudo_password: "your_sudo_password_here"
 vault_app_secret_key: "your_application_secret_key_here"

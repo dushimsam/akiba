@@ -41,7 +41,7 @@ akiba/
 ├── server/                 # Node.js backend (Express)
 │   ├── src/
 │   │   ├── index.js       # Server entry point
-│   │   ├── db.js          # MongoDB connection
+│   │   ├── db.js          # PostgreSQL connection
 │   │   ├── seed.js        # Mock data seeder
 │   │   ├── constants.js   # Transaction constants
 │   │   ├── models/        # Database models
@@ -62,7 +62,7 @@ akiba/
 
 - **Frontend**: React 18 with Vite
 - **Backend**: Node.js with Express
-- **Database**: MongoDB Atlas
+- **Database**: PostgreSQL (managed via AWS RDS in production)
 - **Deployment**: Docker & Docker Compose
 - **Package Manager**: npm with workspaces
 
@@ -78,7 +78,7 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env with your MongoDB connection
+# Edit .env with your PostgreSQL connection
 
 # 3. Start development
 npm run dev              # Both server and client
@@ -119,7 +119,8 @@ Full API documentation available in [API.md](API.md)
 
 ```
 PORT=3000
-MONGODB_URI=your-mongodb-atlas-connection-string
+DATABASE_URL=postgres://user:password@host:5432/akiba
+DATABASE_SSL=false   # set to true for managed databases such as AWS RDS
 NODE_ENV=development
 VITE_API_URL=http://localhost:3000/api
 ```
@@ -131,7 +132,7 @@ See `.env.example` for template.
 ### Phase 1: Foundation ✅ (In Progress)
 - [x] Monorepo structure
 - [x] Backend API endpoints for transactions
-- [x] MongoDB integration with Mongoose
+- [x] PostgreSQL integration with node-postgres (pg)
 - [x] React frontend with Vite
 - [x] Docker containerization
 - [x] Documentation
@@ -217,10 +218,10 @@ npm test -- --watch
 
 ## Troubleshooting
 
-### MongoDB Connection Issues
-1. Check connection string in `.env`
-2. Verify IP whitelist on MongoDB Atlas
-3. Ensure database user has proper permissions
+### PostgreSQL Connection Issues
+1. Check `DATABASE_URL` in `.env`
+2. Verify the security group / firewall allows the app to reach the DB port (5432)
+3. Ensure the database user has proper permissions and `DATABASE_SSL` matches the server (RDS requires `true`)
 
 ### Port Conflicts
 ```bash
@@ -307,7 +308,7 @@ Future improvements:
 ### Production Checklist
 
 - [ ] Environment variables configured
-- [ ] MongoDB Atlas secured
+- [ ] PostgreSQL (RDS) secured
 - [ ] HTTPS enabled
 - [ ] Rate limiting enabled
 - [ ] Logging configured
@@ -321,7 +322,7 @@ See [SECURITY.md](SECURITY.md) for detailed security checklist.
 
 - 📖 [React Documentation](https://react.dev)
 - 📖 [Express.js Guide](https://expressjs.com)
-- 📖 [MongoDB Docs](https://docs.mongodb.com)
+- 📖 [PostgreSQL Docs](https://www.postgresql.org/docs/)
 - 📖 [Vite Guide](https://vitejs.dev)
 - 🐛 [Report Issues](https://github.com/dushimsam/akiba/issues)
 - 💬 [GitHub Discussions](https://github.com/dushimsam/akiba/discussions)
@@ -338,7 +339,7 @@ MIT License - see LICENSE file for details
 
 - Rwanda tech community
 - Contributors and testers
-- MongoDB Atlas free tier
+- PostgreSQL community
 - React and Node.js communities
 
 ---
@@ -366,14 +367,14 @@ cp .env.example .env
 ```bash
 docker compose up --build
 ```
-This starts MongoDB, the Express server, and the Vite client, wired together
-on a private `akiba-network`. The server waits for Mongo to report healthy
+This starts PostgreSQL, the Express server, and the Vite client, wired together
+on a private `akiba-network`. The server waits for Postgres to report healthy
 before starting, and the client waits for the server's `/api/health` check
 before starting.
 
 - Frontend: http://localhost:5173
 - Backend:  http://localhost:3000
-- Mongo:    localhost:27017 (credentials from `.env`)
+- Postgres: localhost:5432 (credentials from `.env`)
 
 ### Run in the background
 ```bash

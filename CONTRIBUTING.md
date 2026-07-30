@@ -49,7 +49,7 @@ Follow conventional commits:
 
 **Examples:**
 - `feat: add transaction filtering by date range`
-- `fix: resolve MongoDB connection timeout issue`
+- `fix: resolve PostgreSQL connection timeout issue`
 - `docs: update API documentation with examples`
 
 ## Code Style Guidelines
@@ -67,7 +67,7 @@ Follow conventional commits:
 - Use PropTypes or TypeScript for type checking
 - Keep styling modular (CSS modules or styled-components)
 
-### MongoDB/Data
+### PostgreSQL/Data
 - Use meaningful field names
 - Add proper indexing
 - Document schema structure
@@ -178,8 +178,8 @@ akiba/
 ## Key Technologies
 
 - **Frontend**: React 18, Vite, Axios
-- **Backend**: Node.js, Express, MongoDB
-- **Database**: MongoDB Atlas
+- **Backend**: Node.js, Express, PostgreSQL (node-postgres)
+- **Database**: PostgreSQL (AWS RDS in production)
 - **Deployment**: Docker, Docker Compose
 
 ## Common Tasks
@@ -187,7 +187,7 @@ akiba/
 ### Adding a New API Endpoint
 
 1. Create a route handler in `server/src/routes/`
-2. Add MongoDB model if needed in `server/src/models/`
+2. Add a data-access module if needed in `server/src/models/`
 3. Update API documentation
 4. Test with cURL or Postman
 5. Update client API service in `client/src/api.js`
@@ -202,7 +202,7 @@ akiba/
 
 ### Database Schema Changes
 
-1. Update MongoDB schema in `server/src/models/`
+1. Update the SQL schema in `server/src/db.js` and queries in `server/src/models/`
 2. Add migration logic if needed
 3. Update API documentation
 4. Test data consistency
@@ -210,7 +210,7 @@ akiba/
 ## Performance Guidelines
 
 - Minimize re-renders in React components
-- Use proper indexing in MongoDB
+- Use proper indexing in PostgreSQL
 - Implement pagination for large datasets
 - Cache frequently accessed data
 - Optimize images and assets

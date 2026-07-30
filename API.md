@@ -141,7 +141,7 @@ Create a new transaction.
 Get details of a specific transaction by ID.
 
 **Parameters:**
-- `id` (path): Transaction ID (MongoDB ObjectId)
+- `id` (path): Transaction ID (UUID)
 
 **Response:**
 ```json

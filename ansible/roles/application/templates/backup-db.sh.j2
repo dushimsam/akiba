@@ -1,24 +1,17 @@
 set -e
 BACKUP_DIR="/opt/akiba/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="$BACKUP_DIR/akiba_backup_$TIMESTAMP.tar.gz"
-CONTAINER_NAME="akiba-mongodb"
-DB_NAME="{{ mongo_db_name | default('akiba') }}"
+BACKUP_FILE="$BACKUP_DIR/akiba_backup_$TIMESTAMP.sql.gz"
+CONTAINER_NAME="akiba-postgres"
+DB_NAME="{{ postgres_db | default('akiba') }}"
+DB_USER="{{ postgres_user | default('akiba') }}"
 mkdir -p "$BACKUP_DIR"
-echo "Starting MongoDB backup for $DB_NAME database..."
+echo "Starting PostgreSQL backup for $DB_NAME database..."
 if ! docker ps | grep -q "$CONTAINER_NAME"; then
-    echo "Error: MongoDB container is not running"
+    echo "Error: PostgreSQL container is not running"
     exit 1
 fi
-docker exec "$CONTAINER_NAME" mongodump \
-    --authenticationDatabase admin \
-    -u {{ mongodb_user | default('root') }} \
-    -p {{ mongodb_password }} \
-    --db "$DB_NAME" \
-    --out /tmp/backup
-docker exec "$CONTAINER_NAME" tar -czf /tmp/akiba_backup.tar.gz -C /tmp backup/
-docker cp "$CONTAINER_NAME:/tmp/akiba_backup.tar.gz" "$BACKUP_FILE"
-docker exec "$CONTAINER_NAME" rm -rf /tmp/backup /tmp/akiba_backup.tar.gz
-find "$BACKUP_DIR" -name "akiba_backup_*.tar.gz" -mtime +7 -delete
+docker exec "$CONTAINER_NAME" pg_dump -U "$DB_USER" -d "$DB_NAME" | gzip > "$BACKUP_FILE"
+find "$BACKUP_DIR" -name "akiba_backup_*.sql.gz" -mtime +7 -delete
 echo "Backup completed successfully: $BACKUP_FILE"
 echo "Backup file size: $(du -h $BACKUP_FILE | cut -f1)"

@@ -20,7 +20,7 @@ app.use(cors())
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 
-// Connect to MongoDB
+// Connect to PostgreSQL
 connectDB()
 
 // Routes

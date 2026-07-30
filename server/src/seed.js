@@ -1,4 +1,4 @@
-import Transaction from '../models/Transaction.js'
+import { deleteByUserId, insertMany } from './models/Transaction.js'
 
 const mockTransactions = [
   {
@@ -50,8 +50,8 @@ const mockTransactions = [
 
 export const seedDatabase = async () => {
   try {
-    await Transaction.deleteMany({ userId: 'user123' })
-    await Transaction.insertMany(mockTransactions)
+    await deleteByUserId('user123')
+    await insertMany(mockTransactions)
     console.log('Mock data seeded successfully')
   } catch (error) {
     console.error('Error seeding database:', error.message)
