@@ -1,5 +1,8 @@
 name: Security Scan
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
@@ -49,3 +52,21 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+
+  iac-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Scan IaC with Checkov
+        run: checkov -d . --framework terraform github_actions --quiet --compact
