@@ -2,8 +2,8 @@
 
 This document describes the security scanning workflow implemented for AKIBA, the vulnerabilities identified during implementation, and the remediation actions taken. It is kept in sync with the CI configuration in [`.github/workflows/security-scan.yml`](.github/workflows/security-scan.yml).
 
-**Last updated:** 2026-07-21  
-**Related PR:** [#35 – feat/security-scanning](https://github.com/dushimsam/akiba/pull/35)
+**Last updated:** 2026-07-30  
+**Related PRs:** [#35 – feat/security-scanning](https://github.com/dushimsam/akiba/pull/35), feat/iac-scanning ([#40](https://github.com/dushimsam/akiba/issues/40))
 
 ---
 
@@ -17,6 +17,7 @@ The project uses two complementary scanners:
 |------|-------|---------|
 | **npm audit** | Node.js dependencies (`package-lock.json`) | Detects known CVEs in npm packages used by the app |
 | **Trivy** | Docker container image | Scans OS packages and application dependencies baked into the production image |
+| **Checkov** | Terraform + GitHub Actions workflows | Detects IaC misconfigurations and CI pipeline hardening issues |
 
 These scans run alongside the main CI pipeline ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), which handles linting, tests, and Docker builds on feature branches.
 
@@ -43,7 +44,8 @@ Pull request opened/updated
         │
         └─► Security Scan workflow (security-scan.yml)
               ├─► dependency-scan  (npm audit)
-              └─► container-scan     (Docker build + Trivy)
+              ├─► container-scan     (Docker build + Trivy)
+              └─► iac-scan           (Checkov)
 ```
 
 Both security jobs run in parallel on `ubuntu-latest`.
@@ -73,6 +75,14 @@ Trivy configuration:
 
 The image scanned is the multi-stage production Dockerfile at the repository root, which builds the React client and serves it from the Express server.
 
+### Job 3: `iac-scan`
+
+| Step | Command | Blocks merge? |
+|------|---------|---------------|
+| Scan IaC with Checkov | `checkov -d . --framework terraform github_actions --quiet --compact` | **Yes** — fails on any failed policy check |
+
+Checkov scans the Terraform configuration (`main.tf`, `variables.tf`) and the GitHub Actions workflows. Severity-based filtering requires a paid platform key, so the gate is stricter than the ticket minimum: any failed check blocks the merge. tfsec was evaluated first but has no rules matching this Terraform setup (a custom API provisioner rather than cloud provider resources), so Checkov was chosen.
+
 ---
 
 ## Findings Summary
@@ -85,6 +95,7 @@ The image scanned is the multi-stage production Dockerfile at the repository roo
 | CVE-2026-13149 / [GHSA-3jxr-9vmj-r5cp](https://github.com/advisories/GHSA-3jxr-9vmj-r5cp) | `brace-expansion` 1.1.15 | High | npm audit | **Fixed** → 1.1.16 |
 | Alpine OS packages (unpatched CVEs in base image) | `node:20-alpine` runtime layer | High / Critical | Trivy | **Fixed** → `apk upgrade --no-cache` |
 | npm CLI in production image | `node:20-alpine` runtime layer | High | Trivy | **Fixed** → npm binaries removed after install |
+| [CKV2_GHA_1](https://www.checkov.io/5.Policy%20Index/github_actions.html) — workflows run with default write token | `ci.yml`, `security-scan.yml` | Medium | Checkov | **Fixed** → top-level `permissions: contents: read` added to both workflows |
 
 ### Production dependency scan (current status)
 
@@ -156,7 +167,16 @@ After Dockerfile hardening (Alpine package upgrades and removal of the npm CLI f
 
 **Verification:** Trivy no longer flags npm-related packages in the final runtime image.
 
-### 5. Invalid Trivy action version (workflow fix)
+### 5. GitHub Actions workflows ran with default write token (CKV2_GHA_1)
+
+**Finding:** Neither workflow declared top-level `permissions`, so every job received the repository's default `GITHUB_TOKEN` with write access. A compromised action or dependency in the pipeline could push code or tamper with releases.
+
+**Remediation:**
+- Added `permissions: contents: read` at the top level of `ci.yml` and `security-scan.yml`, restricting all jobs to read-only access
+
+**Verification:** `checkov --framework terraform github_actions` passes with 0 failed checks.
+
+### 6. Invalid Trivy action version (workflow fix)
 
 **Finding:** Initial workflow referenced an invalid `trivy-action` version tag, causing the container scan job to fail before any image analysis could run.
 
@@ -184,6 +204,18 @@ The informational full audit (`npm audit` without `--omit=dev`) still reports vu
 - Fixing `vite`/`esbuild` requires upgrading to Vite 8.x, which is a **breaking change** and is deferred to a dedicated dependency upgrade task.
 
 **Planned action:** Upgrade Vite and related dev tooling in a future PR when the team can regression-test the frontend build.
+
+### Checkov findings outside the CI gate (accepted risk)
+
+A full repository scan (`checkov -d .` without a framework filter) also reports:
+
+| Check | Resource | Justification |
+|-------|----------|---------------|
+| CKV_DOCKER_2 (no HEALTHCHECK) | root, `client/`, `server/` Dockerfiles | Health checks are handled by the deployment layer; `client/` and `server/` Dockerfiles are local-dev only (`docker-compose.yml`) |
+| CKV_DOCKER_3 (no USER) | `client/`, `server/` Dockerfiles | Local-dev images only; the production image at the repo root already runs as a non-root `appuser` |
+| CKV2_ANSIBLE_1 (HTTP uri) | `ansible/roles/application` health check task | The check targets `localhost` on the provisioned VM; traffic never leaves the host |
+
+The CI gate is scoped to `terraform` and `github_actions` frameworks, so these do not block merges. They are documented here for visibility and can be revisited if the deployment model changes.
 
 ### Application-level security gaps (not detected by automated scans)
 
@@ -218,6 +250,9 @@ npm audit
 # Container scan (requires Docker and Trivy)
 docker build -t akiba-app:local .
 trivy image --severity HIGH,CRITICAL --ignore-unfixed akiba-app:local
+
+# IaC scan (requires Docker; same gate as CI)
+docker run --rm -v "$PWD:/tf" bridgecrew/checkov -d /tf --framework terraform github_actions --quiet --compact
 ```
 
 Install Trivy: https://aquasecurity.github.io/trivy/latest/getting-started/installation/
