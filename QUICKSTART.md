@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Node.js v16 or higher
-- MongoDB Atlas account (free tier available)
+- PostgreSQL 14+ (or use the bundled Docker Compose Postgres service)
 - Docker & Docker Compose (optional)
 
 ## Option 1: Local Development (Recommended for beginners)
@@ -25,14 +25,15 @@ npm install
 # Copy environment template
 cp .env.example .env
 
-# Edit .env with your MongoDB Atlas connection string
+# Edit .env with your PostgreSQL connection string
 nano .env
 ```
 
 **Environment variables needed:**
 ```
 PORT=3000
-MONGODB_URI=******cluster.mongodb.net/akiba?retryWrites=true&w=majority
+DATABASE_URL=postgres://akiba:changeme@localhost:5432/akiba
+DATABASE_SSL=false
 NODE_ENV=development
 ```
 
@@ -57,7 +58,7 @@ npm run dev:client
 
 ```bash
 cp .env.example .env
-# Update .env with your MongoDB connection string
+# Update .env with your PostgreSQL connection string
 ```
 
 ### Step 2: Start All Services
@@ -71,7 +72,7 @@ docker-compose up -d
 ```
 
 **Services running:**
-- MongoDB: localhost:27017
+- PostgreSQL: localhost:5432
 - Backend: localhost:3000
 - Frontend: localhost:5173
 
@@ -122,10 +123,10 @@ npm run build:client
 
 ## Troubleshooting
 
-### MongoDB Connection Error
-- Verify connection string in `.env`
-- Check MongoDB Atlas IP whitelist includes your IP
-- Ensure database user has correct permissions
+### PostgreSQL Connection Error
+- Verify `DATABASE_URL` in `.env`
+- Check the database is reachable on port 5432 (firewall / security group)
+- Ensure the database user has correct permissions and `DATABASE_SSL` matches the server
 
 ### Port Already in Use
 ```bash
@@ -148,8 +149,8 @@ npm install
 
 ## Next Steps
 
-1. Create MongoDB Atlas account: https://www.mongodb.com/cloud/atlas
-2. Set up connection string in `.env`
+1. Provision a PostgreSQL database (local, Docker, or AWS RDS)
+2. Set up `DATABASE_URL` in `.env`
 3. Start development servers
 4. Explore API endpoints
 5. Begin developing features
@@ -159,7 +160,7 @@ npm install
 - [Express.js Documentation](https://expressjs.com/)
 - [React Documentation](https://react.dev/)
 - [Vite Documentation](https://vitejs.dev/)
-- [MongoDB Atlas Guide](https://docs.atlas.mongodb.com/)
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
 
 ## Support
 

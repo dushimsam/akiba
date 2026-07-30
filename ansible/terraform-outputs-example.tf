@@ -34,7 +34,7 @@ output "ansible_deployment_command" {
     ansible-playbook configure.yml \
       -i inventory/hosts.yml \
       --ask-vault-pass \
-      -e "mongodb_password=YOUR_MONGODB_PASSWORD"
+      -e "postgres_password=YOUR_POSTGRES_PASSWORD"
   EOT
   sensitive   = false
 }

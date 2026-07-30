@@ -27,7 +27,7 @@
           Target Host: {{ ansible_host }}
           Environment: {{ server_env | default('production') }}
           Application Port: {{ server_port | default(3000) }}
-          MongoDB Database: {{ mongo_db_name | default('akiba') }}
+          PostgreSQL Database: {{ postgres_db | default('akiba') }}
       tags: ['always', 'info']
 
     - name: Verify Ansible control node connectivity
@@ -57,10 +57,10 @@
           - Check status: docker-compose -f /opt/akiba/docker-compose.yml ps
           - View firewall: sudo ufw status
           
-          MongoDB Access:
+          PostgreSQL Access:
           - Host: localhost
-          - Port: 27017
-          - Database: {{ mongo_db_name | default('akiba') }}
+          - Port: {{ postgres_port | default(5432) }}
+          - Database: {{ postgres_db | default('akiba') }}
           
           For detailed logs: journalctl -u akiba -f
       tags: ['always', 'summary']

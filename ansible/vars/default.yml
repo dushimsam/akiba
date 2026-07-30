@@ -5,8 +5,9 @@ server_port: 3000
 node_env: production
 server_env: production
 region: KGL-1
-mongodb_user: root
-mongo_db_name: akiba
+postgres_user: akiba
+postgres_db: akiba
+postgres_port: 5432
 deployment_user: appuser
 ssh_port: 22
 ssh_max_auth_tries: 3

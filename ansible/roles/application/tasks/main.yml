@@ -55,7 +55,7 @@
   loop:
     - /opt/akiba/logs
     - /opt/akiba/data
-    - /opt/akiba/mongodb_data
+    - /opt/akiba/postgres_data
   tags:
     - application
     - deployment
@@ -170,7 +170,7 @@
     - backup
 - name: Set up cron job for daily database backups
   cron:
-    name: "Backup AKIBA MongoDB daily"
+    name: "Backup AKIBA PostgreSQL daily"
     hour: "2"
     minute: "0"
     job: "/usr/local/bin/backup-akiba-db"

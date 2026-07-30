@@ -253,4 +253,4 @@ If you discover a security issue in AKIBA:
 - [Trivy documentation](https://aquasecurity.github.io/trivy/)
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [Express.js security best practices](https://expressjs.com/en/advanced/best-practice-security.html)
-- [MongoDB security checklist](https://www.mongodb.com/docs/manual/administration/security-checklist/)
+- [PostgreSQL security documentation](https://www.postgresql.org/docs/current/security.html)
