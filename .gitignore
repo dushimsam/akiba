@@ -14,6 +14,7 @@ dist/
 build/
 .next/
 .vite/
+Made.md 
 
 # Test coverage
 coverage/
