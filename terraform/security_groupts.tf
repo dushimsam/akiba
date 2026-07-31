@@ -9,6 +9,14 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = ["0.0.0.0/0"]   # It's open to the world
   }
 
+  # Allow HTTP traffic for Nginx reverse proxy
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -16,6 +24,7 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = ["0.0.0.0/0"] # Can talk to any one outside
   }
 }
+
 
 resource "aws_security_group" "app" {
   vpc_id = aws_vpc.main.id
