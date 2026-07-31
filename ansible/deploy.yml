@@ -1,0 +1,115 @@
+---
+# CD calls this after the image is in ECR.
+# playbook.yml still just installs docker; this one actually ships the app.
+
+- name: Pull image and restart akiba on the app vm
+  hosts: app
+  become: true
+  gather_facts: no
+  vars:
+    app_dir: /opt/akiba
+
+  tasks:
+    - name: Make sure deploy dir exists
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Drop compose file
+      copy:
+        src: "{{ playbook_dir }}/../docker-compose.prod.yml"
+        dest: "{{ app_dir }}/docker-compose.yml"
+        mode: "0644"
+
+    - name: Write env for compose
+      copy:
+        dest: "{{ app_dir }}/.env"
+        mode: "0600"
+        content: |
+          ECR_IMAGE={{ ecr_image }}
+          DATABASE_URL={{ lookup('env', 'DATABASE_URL') }}
+          DATABASE_SSL={{ database_ssl | default('true') }}
+
+    - name: Login to ecr so we can pull
+      shell: |
+        echo "$ECR_PASSWORD" | docker login --username AWS --password-stdin {{ ecr_registry }}
+      environment:
+        ECR_PASSWORD: "{{ lookup('env', 'ECR_PASSWORD') }}"
+      no_log: true
+
+    - name: Pull the new image
+      command: docker-compose -f {{ app_dir }}/docker-compose.yml pull
+      args:
+        chdir: "{{ app_dir }}"
+
+    - name: Bring the stack up
+      command: docker-compose -f {{ app_dir }}/docker-compose.yml up -d
+      args:
+        chdir: "{{ app_dir }}"
+
+    - name: Wait a bit then hit health
+      uri:
+        url: "http://127.0.0.1:3000/api/health"
+        method: GET
+        status_code: 200
+      register: health
+      retries: 8
+      delay: 5
+      until: health.status == 200
+
+- name: Point bastion nginx at the app (public url)
+  hosts: bastion
+  become: true
+  gather_facts: yes
+
+  tasks:
+    - name: Install nginx if missing
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Nginx site for akiba
+      copy:
+        dest: /etc/nginx/sites-available/akiba
+        mode: "0644"
+        content: |
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+              server_name _;
+
+              location / {
+                  proxy_pass http://{{ hostvars[groups['app'][0]].ansible_host }}:3000;
+                  proxy_http_version 1.1;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              }
+          }
+
+    - name: Enable the site
+      file:
+        src: /etc/nginx/sites-available/akiba
+        dest: /etc/nginx/sites-enabled/akiba
+        state: link
+      notify: reload nginx
+
+    - name: Drop the default site so ours wins
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: reload nginx
+
+    - name: nginx running
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: reload nginx
+      service:
+        name: nginx
+        state: reloaded

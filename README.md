@@ -22,7 +22,47 @@ AKIBA addresses this by putting common mobile money operations behind a simple a
 - **[API.md](API.md)** - Complete API documentation
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines
 - **[SECURITY.md](SECURITY.md)** - Security guidelines and roadmap
+- **[CHANGELOG.md](CHANGELOG.md)** - F1 → F2 → Summative changes
 - **[Project Board](https://github.com/dushimsam/akiba/projects)** - Kanban board with backlog, in progress and done columns
+
+## Architecture
+
+```text
+  Developer
+      |
+      | push / PR
+      v
+  GitHub Actions
+   ├─ ci.yml            lint + test + docker build  (feature branches / PRs)
+   ├─ security-scan.yml npm audit + Trivy + Checkov (PRs + main)
+   └─ cd.yml            full checks → ECR → Ansible  (main only)
+                              |
+                              v
+                         AWS ECR (akiba)
+                              |
+                              v
+                     Ansible (via bastion jump)
+                              |
+              +---------------+----------------+
+              |                                |
+              v                                v
+     Bastion (public)                   App VM (private)
+     nginx :80  --------------------->  docker-compose
+     (public URL)                       akiba container :3000
+                                              |
+                                              v
+                                         AWS RDS (Postgres)
+```
+
+## Live application
+
+After a successful CD run the app is reachable at:
+
+**http://3.84.131.80**
+
+(Health: `http://3.84.131.80/api/health`)
+
+That IP is the bastion. nginx there proxies to the private app VM. If Terraform recreates the bastion, update this URL from `terraform output live_app_url`.
 
 ## Project Structure
 
@@ -305,16 +345,69 @@ Future improvements:
 
 ## Deployment
 
+### How CD works
+
+Pushing to `main` runs [`.github/workflows/cd.yml`](.github/workflows/cd.yml):
+
+1. Lint, test, `npm audit` (prod, high+)
+2. Build the production image + Trivy (HIGH/CRITICAL)
+3. Auth to AWS and push to ECR (`akiba`)
+4. Ansible `deploy.yml` over the bastion → pull image → `docker-compose up -d`
+5. Smoke check `http://$BASTION_HOST/api/health`
+
+### Secrets the CD workflow expects
+
+Set these under repo **Settings → Secrets and variables → Actions**:
+
+| Secret | What it is |
+|--------|------------|
+| `AWS_ACCESS_KEY_ID` | IAM user that can push/pull ECR |
+| `AWS_SECRET_ACCESS_KEY` | matching secret |
+| `AWS_REGION` | e.g. `us-east-1` |
+| `SSH_PRIVATE_KEY` | key that can jump bastion → app |
+| `BASTION_HOST` | bastion public IP (`terraform output bastion_public_ip`) |
+| `APP_HOST` | app private IP (`terraform output app_private_ip`) |
+| `DATABASE_URL` | Postgres URL the container should use (usually RDS) |
+
+### Setup another engineer can follow
+
+```bash
+# 1. App locally
+git clone https://github.com/dushimsam/akiba.git
+cd akiba
+cp .env.example .env
+npm install
+npm run lint && npm test
+docker compose up --build   # local stack
+
+# 2. Infra (needs AWS creds + SSH pubkeys at the paths in ec2.tf)
+cd terraform
+terraform init
+terraform plan -var="db_password=YOUR_DB_PASSWORD"
+terraform apply -var="db_password=YOUR_DB_PASSWORD"
+terraform output
+
+# 3. First-time host setup (Docker on the app VM)
+cd ../ansible
+ansible-playbook playbook.yml -i inventory.ini
+
+# 4. Wire GitHub secrets from the terraform outputs, then merge to main
+#    CD builds, pushes to ECR, and runs deploy.yml
+```
+
+Production compose file used on the VM: `docker-compose.prod.yml` (image from ECR).  
+Day-to-day local compose stays in `docker-compose.yml`.
+
 ### Production Checklist
 
-- [ ] Environment variables configured
-- [ ] PostgreSQL (RDS) secured
+- [x] Environment variables configured (via Ansible `.env` on the VM)
+- [x] PostgreSQL (RDS) secured (private subnets + SG)
 - [ ] HTTPS enabled
 - [ ] Rate limiting enabled
-- [ ] Logging configured
-- [ ] Backups scheduled
+- [x] Logging configured
+- [x] Backups scheduled (Ansible cron on the app host)
 - [ ] Monitoring active
-- [ ] Security audit completed
+- [x] Security scans in CI (see SECURITY.md)
 
 See [SECURITY.md](SECURITY.md) for detailed security checklist.
 
@@ -344,9 +437,9 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Status**: Foundation Phase (v1.0.0)  
-**Last Updated**: 2024-06-26  
-**Next Phase**: Core Features Development
+**Status**: Summative / DevSecOps deploy pipeline  
+**Last Updated**: 2026-07-31  
+**Next Phase**: Core product features (auth, analytics UI)
 
 **Questions?** Check the [QUICKSTART.md](QUICKSTART.md) or open an [issue](https://github.com/dushimsam/akiba/issues).
 

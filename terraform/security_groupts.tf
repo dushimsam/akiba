@@ -9,6 +9,14 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = ["0.0.0.0/0"]   # It's open to the world
   }
 
+  # public entrypoint - nginx on bastion proxies to the app vm
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
