@@ -1,11 +1,4 @@
 ---
-# ---------------------------------------------------------------
-# deploy.yml – Deploy the Akiba app on the app-vm and set up
-#              Nginx reverse-proxy on the bastion host so the
-#              application is publicly reachable at port 80.
-# ---------------------------------------------------------------
-
-# ==================== PLAY 1 – APP VM ==========================
 - name: Deploy Akiba application on the app VM
   hosts: app
   become: true
