@@ -130,11 +130,13 @@ jobs:
             -e "database_ssl=true"
 
       - name: Smoke check public url
+        env:
+          BASTION_HOST: ${{ secrets.BASTION_HOST }}
         run: |
           # bastion nginx fronts the app
           for i in 1 2 3 4 5; do
-            if curl -sf "http://${{ secrets.BASTION_HOST }}/api/health"; then
-              echo "app is up at http://${{ secrets.BASTION_HOST }}"
+            if curl -sf "http://${BASTION_HOST}/api/health"; then
+              echo "app is up at http://${BASTION_HOST}"
               exit 0
             fi
             sleep 5

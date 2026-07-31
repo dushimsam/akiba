@@ -79,9 +79,9 @@ The image scanned is the multi-stage production Dockerfile at the repository roo
 
 | Step | Command | Blocks merge? |
 |------|---------|---------------|
-| Scan IaC with Checkov | `checkov -d . --framework terraform github_actions --quiet --compact` | **Yes** — fails on any failed policy check |
+| Scan IaC with Checkov | `checkov -d . --config-file .checkov.yaml --framework terraform github_actions --quiet --compact` | **Yes** — fails on any failed policy check |
 
-Checkov scans the Terraform configuration (`main.tf`, `variables.tf`) and the GitHub Actions workflows. Severity-based filtering requires a paid platform key, so the gate is stricter than the ticket minimum: any failed check blocks the merge. tfsec was evaluated first but has no rules matching this Terraform setup (a custom API provisioner rather than cloud provider resources), so Checkov was chosen.
+Checkov scans the Terraform configuration (`terraform/`) and the GitHub Actions workflows. Severity-based filtering requires a paid platform key, so the gate is stricter than the ticket minimum: any failed check blocks the merge. tfsec was evaluated first but has no rules matching this Terraform setup, so Checkov was chosen. Suppressed policies are listed in [`.checkov.yaml`](.checkov.yaml) with a justification comment per check.
 
 ---
 
@@ -96,6 +96,7 @@ Checkov scans the Terraform configuration (`main.tf`, `variables.tf`) and the Gi
 | Alpine OS packages (unpatched CVEs in base image) | `node:20-alpine` runtime layer | High / Critical | Trivy | **Fixed** → `apk upgrade --no-cache` |
 | npm CLI in production image | `node:20-alpine` runtime layer | High | Trivy | **Fixed** → npm binaries removed after install |
 | [CKV2_GHA_1](https://www.checkov.io/5.Policy%20Index/github_actions.html) — workflows run with default write token | `ci.yml`, `security-scan.yml` | Medium | Checkov | **Fixed** → top-level `permissions: contents: read` added to both workflows |
+| CKV_GHA_3 — secret used directly inside a curl command | `cd.yml` smoke check step | Medium | Checkov | **Fixed** → secret moved into a step-level `env` variable |
 
 ### Production dependency scan (current status)
 
@@ -217,6 +218,19 @@ A full repository scan (`checkov -d .` without a framework filter) also reports:
 
 The CI gate is scoped to `terraform` and `github_actions` frameworks, so these do not block merges. They are documented here for visibility and can be revisited if the deployment model changes.
 
+### Terraform findings suppressed in `.checkov.yaml`
+
+The AWS infrastructure added in `terraform/` (VPC, EC2, RDS, ECR) triggered 34 Checkov findings. Each suppressed policy is listed in [`.checkov.yaml`](.checkov.yaml) with a one-line justification, grouped as:
+
+| Group | Examples | Rationale |
+|-------|----------|-----------|
+| **Temporary — assigned to infra owner** | Unencrypted EBS volumes (CKV_AWS_8), unencrypted RDS storage (CKV_AWS_16), IMDSv1 enabled (CKV_AWS_79) | Real hardening gaps. Enabling encryption forces AWS to replace the running instances, so the fix needs a planned `terraform apply` by the infrastructure owner |
+| **Intentional for this architecture** | SSH and port 80 open to the world on the bastion, public-IP subnet, mutable `:latest` ECR tag | Required for GitHub Actions SSH deploys and public web access |
+| **Risk-accepted (student project)** | Multi-AZ, enhanced monitoring, performance insights, KMS, VPC flow logs | Paid or enterprise-scale AWS features out of budget for coursework |
+| **Deferred hygiene** | Security group descriptions, RDS auto minor upgrades, deletion protection | Low impact; deletion protection would block the end-of-course teardown |
+
+**Recommended follow-ups for the infrastructure owner:** enable EBS/RDS encryption at rest before real data is stored, require IMDSv2 on both instances, and restrict bastion SSH to known IP ranges if GitHub Actions deploys move to a fixed runner.
+
 ### Application-level security gaps (not detected by automated scans)
 
 The following items were identified during implementation review. They are **not** reported by npm audit or Trivy but are tracked for future hardening:
@@ -252,7 +266,7 @@ docker build -t akiba-app:local .
 trivy image --severity HIGH,CRITICAL --ignore-unfixed akiba-app:local
 
 # IaC scan (requires Docker; same gate as CI)
-docker run --rm -v "$PWD:/tf" bridgecrew/checkov -d /tf --framework terraform github_actions --quiet --compact
+docker run --rm -v "$PWD:/tf" bridgecrew/checkov -d /tf --config-file /tf/.checkov.yaml --framework terraform github_actions --quiet --compact
 ```
 
 Install Trivy: https://aquasecurity.github.io/trivy/latest/getting-started/installation/

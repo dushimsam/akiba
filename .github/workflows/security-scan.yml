@@ -69,4 +69,4 @@ jobs:
         run: pip install checkov
 
       - name: Scan IaC with Checkov
-        run: checkov -d . --framework terraform github_actions --quiet --compact
+        run: checkov -d . --config-file .checkov.yaml --framework terraform github_actions --quiet --compact

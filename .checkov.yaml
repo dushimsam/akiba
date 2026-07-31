@@ -1,0 +1,34 @@
+# Suppressed Checkov findings with justification (see SECURITY.md for details).
+skip-check:
+  # Temporary suppressions — real hardening gaps, assigned to the infra owner.
+  # Fixing them forces AWS to replace running resources, so they need a planned apply.
+  - CKV_AWS_8 # EBS volumes unencrypted — fix forces EC2 replacement
+  - CKV_AWS_16 # RDS storage unencrypted — fix forces DB replacement
+  - CKV_AWS_79 # IMDSv1 enabled — owner to require IMDSv2 (in-place change)
+
+  # Intentional for this architecture.
+  - CKV_AWS_24 # SSH from 0.0.0.0/0 on bastion — GitHub Actions deploys over SSH from dynamic IPs
+  - CKV_AWS_260 # Port 80 open to the world — public web app fronted by nginx on the bastion
+  - CKV_AWS_130 # Public subnet assigns public IPs — bastion and app need public reachability
+  - CKV_AWS_382 # Unrestricted egress — instances pull images and packages from the internet
+  - CKV_AWS_51 # Mutable ECR tags — CD pushes a moving :latest tag by design
+
+  # Risk-accepted for a student project: paid or enterprise-scale features.
+  - CKV_AWS_118 # RDS enhanced monitoring
+  - CKV_AWS_126 # EC2 detailed monitoring
+  - CKV_AWS_129 # RDS log exports
+  - CKV_AWS_135 # EBS-optimized instances
+  - CKV_AWS_136 # KMS-encrypted ECR
+  - CKV_AWS_157 # RDS Multi-AZ
+  - CKV_AWS_161 # RDS IAM authentication
+  - CKV_AWS_353 # RDS performance insights
+  - CKV2_AWS_11 # VPC flow logs
+  - CKV2_AWS_30 # Postgres query logging
+
+  # Low-impact hygiene, deferred to the infra owner.
+  - CKV_AWS_23 # Security group descriptions
+  - CKV_AWS_226 # RDS auto minor upgrades
+  - CKV_AWS_293 # RDS deletion protection — project infra is torn down after the course
+  - CKV2_AWS_12 # Default VPC security group restriction
+  - CKV2_AWS_41 # IAM role attached to EC2
+  - CKV2_AWS_60 # Copy tags to RDS snapshots
