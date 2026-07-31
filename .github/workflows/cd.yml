@@ -1,0 +1,143 @@
+name: CD
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build Docker image
+        run: docker build -t akiba-app:${{ github.sha }} .
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: akiba-app:${{ github.sha }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push image to ECR
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPO: akiba
+          TAG: ${{ github.sha }}
+        run: |
+          IMAGE="$REGISTRY/$REPO:$TAG"
+          docker tag akiba-app:$TAG "$IMAGE"
+          docker tag akiba-app:$TAG "$REGISTRY/$REPO:latest"
+          docker push "$IMAGE"
+          docker push "$REGISTRY/$REPO:latest"
+          echo "ECR_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "ECR_REGISTRY=$REGISTRY" >> "$GITHUB_ENV"
+
+      - name: Grab ECR password for the app vm
+        id: ecrpass
+        run: |
+          PW=$(aws ecr get-login-password --region "${{ secrets.AWS_REGION }}")
+          echo "::add-mask::$PW"
+          echo "password=$PW" >> "$GITHUB_OUTPUT"
+
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.BASTION_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Install Ansible
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ansible
+
+      - name: Build inventory from secrets
+        env:
+          BASTION_HOST: ${{ secrets.BASTION_HOST }}
+          APP_HOST: ${{ secrets.APP_HOST }}
+        run: |
+          KEY="$HOME/.ssh/id_rsa"
+          {
+            echo "[bastion]"
+            echo "bastion-host ansible_host=${BASTION_HOST} ansible_user=ubuntu ansible_ssh_private_key_file=${KEY}"
+            echo
+            echo "[app]"
+            echo "app-vm ansible_host=${APP_HOST}"
+            echo
+            echo "[app:vars]"
+            echo "ansible_user=ubuntu"
+            echo "ansible_ssh_private_key_file=${KEY}"
+            echo "ansible_ssh_common_args='-o StrictHostKeyChecking=no -J ubuntu@${BASTION_HOST}'"
+            echo "ansible_become=yes"
+            echo "ansible_python_interpreter=/usr/bin/python3"
+            echo
+            echo "[bastion:vars]"
+            echo "ansible_user=ubuntu"
+            echo "ansible_ssh_private_key_file=${KEY}"
+            echo "ansible_become=yes"
+            echo "ansible_python_interpreter=/usr/bin/python3"
+          } > ansible/inventory.cd.ini
+          cat ansible/inventory.cd.ini
+
+      - name: Run Ansible deploy
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+          ECR_PASSWORD: ${{ steps.ecrpass.outputs.password }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          ansible-playbook ansible/deploy.yml \
+            -i ansible/inventory.cd.ini \
+            -e "ecr_image=${ECR_IMAGE}" \
+            -e "ecr_registry=${ECR_REGISTRY}" \
+            -e "database_ssl=true"
+
+      - name: Smoke check public url
+        run: |
+          # bastion nginx fronts the app
+          for i in 1 2 3 4 5; do
+            if curl -sf "http://${{ secrets.BASTION_HOST }}/api/health"; then
+              echo "app is up at http://${{ secrets.BASTION_HOST }}"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "health check failed"
+          exit 1

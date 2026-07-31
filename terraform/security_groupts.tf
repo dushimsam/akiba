@@ -9,7 +9,7 @@ resource "aws_security_group" "bastion" {
     cidr_blocks = ["0.0.0.0/0"]   # It's open to the world
   }
 
-  # Allow HTTP traffic for Nginx reverse proxy
+  # public entrypoint - nginx on bastion proxies to the app vm
   ingress {
     from_port   = 80
     to_port     = 80
