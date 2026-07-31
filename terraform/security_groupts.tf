@@ -25,6 +25,7 @@ resource "aws_security_group" "bastion" {
   }
 }
 
+
 resource "aws_security_group" "app" {
   vpc_id = aws_vpc.main.id
 
